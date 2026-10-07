@@ -16,6 +16,12 @@ import {
   MessageSquare,
   Calendar,
   LogOut,
+  Flame,
+  Layers,
+  ListOrdered,
+  ExternalLink,
+  AlertCircle,
+  Check,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AppNavigation from '../components/AppNavigation';
@@ -24,7 +30,7 @@ import RecipeStudio from '../components/recipe/RecipeStudio';
 import GroceryListView from '../components/grocery/GroceryListView';
 import MealPlannerView from '../components/planner/MealPlannerView';
 import { processUserMessage } from '../services/aiService';
-import { addIngredientsFromRecipe, loadGroceryList } from '../services/groceryService';
+import { addIngredientsFromRecipe, addManualItem, loadGroceryList } from '../services/groceryService';
 
 const starterSuggestions = [
   'I want a healthy dinner',
@@ -41,6 +47,7 @@ export default function ChatPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [messages, setMessages] = useState([]);
+  const [sessionId, setSessionId] = useState(null);
   const [inputValue, setInputValue] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [isZaiHappy, setIsZaiHappy] = useState(false);
@@ -130,24 +137,48 @@ export default function ChatPage() {
     setIsThinking(true);
 
     try {
-      const response = await processUserMessage(text, messages);
+      const response = await processUserMessage(text, messages, { sessionId });
+
+      if (response?.sessionId) {
+        setSessionId(response.sessionId);
+      }
 
       const zaiMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'zai',
         text: response.message,
         action: response.actionPayload,
+        recipe: response.recipe || null,
+        groceryItems: response.groceryItems || null,
+        priceComparison: response.priceComparison || null,
+        metadata: response.metadata || null,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
       setMessages((prev) => [...prev, zaiMessage]);
       setIsZaiHappy(true);
       setTimeout(() => setIsZaiHappy(false), 900);
-    } catch {
+    } catch (err) {
+      let friendlyError = 'I encountered a momentary connection hiccup. Please try asking again.';
+      if (err?.status === 401 || err?.message?.includes('session has expired') || err?.message?.includes('Authentication required')) {
+        friendlyError = 'Your session has expired. Please sign in again to continue messaging Zai.';
+      } else if (err?.status === 503 || err?.message?.includes('Database service is currently unavailable')) {
+        friendlyError = 'Zai service is temporarily offline for maintenance. Please check back shortly.';
+      } else if (err?.status === 400 && err?.message) {
+        friendlyError = err.message;
+      } else if (err?.message) {
+        // Strip sensitive identifiers, tokens, secrets, or internal paths
+        friendlyError = String(err.message)
+          .replace(/bearer\s+[a-zA-Z0-9._-]+/gi, '[REDACTED]')
+          .replace(/mongodb(\+srv)?:\/\/[^\s]+/gi, '[DATABASE]')
+          .replace(/key=[a-zA-Z0-9_-]+/gi, '[KEY]');
+      }
+
       const errorMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'zai',
-        text: "I encountered a momentary connection hiccup. Please try asking again.",
+        text: friendlyError,
+        isError: true,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -171,6 +202,7 @@ export default function ChatPage() {
 
   const handleClearChat = () => {
     setMessages([]);
+    setSessionId(null);
     setIsZaiHappy(true);
     setTimeout(() => setIsZaiHappy(false), 600);
   };
@@ -377,6 +409,317 @@ export default function ChatPage() {
                         </span>
                       </div>
                       <p className="whitespace-pre-wrap">{msg.text}</p>
+
+                      {/* Error state notice */}
+                      {msg.isError && (
+                        <div className="mt-2.5 flex items-center gap-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200/80 px-3 py-2 rounded-xl">
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>{msg.text}</span>
+                        </div>
+                      )}
+
+                      {/* Structured Recipe Result */}
+                      {msg.recipe && (
+                        <div className="mt-3 bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 space-y-3 shadow-2xs text-left">
+                          <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                            <div>
+                              <div className="flex items-center gap-1.5 text-emerald-800 text-xs sm:text-sm font-bold">
+                                <ChefHat className="w-4 h-4 text-emerald-600" />
+                                <span>{msg.recipe.name || msg.recipe.title || 'Personalized Recipe'}</span>
+                              </div>
+                              {msg.recipe.description && (
+                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">{msg.recipe.description}</p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {msg.recipe.servings && (
+                                <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-semibold">
+                                  {msg.recipe.servings} Servings
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Cooking Time and Cuisine */}
+                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600 font-medium">
+                            {(msg.recipe.cookTime || msg.recipe.prepTime || msg.recipe.totalTime) && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-emerald-600" />
+                                <span>Cook: {msg.recipe.cookTime || msg.recipe.totalTime || msg.recipe.prepTime}</span>
+                              </span>
+                            )}
+                            {msg.recipe.cuisine && (
+                              <span className="text-slate-500 font-medium">&bull; {msg.recipe.cuisine}</span>
+                            )}
+                          </div>
+
+                          {/* Real Nutrition Breakdown (Only displayed if provided; never invented) */}
+                          {msg.recipe.nutrition && (msg.recipe.nutrition.calories != null || msg.recipe.nutrition.protein != null || msg.recipe.nutrition.carbohydrates != null || msg.recipe.nutrition.fats != null) && (
+                            <div className="bg-slate-50/90 rounded-xl p-2.5 border border-slate-200/70">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                Nutrition (Per Serving)
+                              </span>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                                {msg.recipe.nutrition.calories != null && (
+                                  <div className="bg-white p-1.5 rounded-lg border border-slate-200/60 shadow-2xs">
+                                    <span className="text-[10px] text-slate-400 block">Calories</span>
+                                    <span className="font-bold text-slate-900">{msg.recipe.nutrition.calories} kcal</span>
+                                  </div>
+                                )}
+                                {msg.recipe.nutrition.protein != null && (
+                                  <div className="bg-white p-1.5 rounded-lg border border-slate-200/60 shadow-2xs">
+                                    <span className="text-[10px] text-slate-400 block">Protein</span>
+                                    <span className="font-bold text-emerald-700">
+                                      {typeof msg.recipe.nutrition.protein === 'number' ? `${msg.recipe.nutrition.protein}g` : msg.recipe.nutrition.protein}
+                                    </span>
+                                  </div>
+                                )}
+                                {msg.recipe.nutrition.carbohydrates != null && (
+                                  <div className="bg-white p-1.5 rounded-lg border border-slate-200/60 shadow-2xs">
+                                    <span className="text-[10px] text-slate-400 block">Carbs</span>
+                                    <span className="font-bold text-teal-700">
+                                      {typeof msg.recipe.nutrition.carbohydrates === 'number' ? `${msg.recipe.nutrition.carbohydrates}g` : msg.recipe.nutrition.carbohydrates}
+                                    </span>
+                                  </div>
+                                )}
+                                {msg.recipe.nutrition.fats != null && (
+                                  <div className="bg-white p-1.5 rounded-lg border border-slate-200/60 shadow-2xs">
+                                    <span className="text-[10px] text-slate-400 block">Fats</span>
+                                    <span className="font-bold text-amber-700">
+                                      {typeof msg.recipe.nutrition.fats === 'number' ? `${msg.recipe.nutrition.fats}g` : msg.recipe.nutrition.fats}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Ingredients */}
+                          {Array.isArray(msg.recipe.ingredients) && msg.recipe.ingredients.length > 0 && (
+                            <div className="space-y-1.5 pt-1">
+                              <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                                <Layers className="w-3 h-3 text-emerald-600" />
+                                <span>Ingredients ({msg.recipe.ingredients.length})</span>
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+                                {msg.recipe.ingredients.map((ing, i) => (
+                                  <div key={i} className="flex items-center justify-between bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200/70">
+                                    <span className="font-medium text-slate-800 truncate pr-2">{ing.name || ing.item}</span>
+                                    <span className="text-slate-500 font-semibold shrink-0">
+                                      {[ing.quantity, ing.unit].filter(Boolean).join(' ')}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Instructions */}
+                          {Array.isArray(msg.recipe.instructions) && msg.recipe.instructions.length > 0 && (
+                            <div className="space-y-1.5 pt-1">
+                              <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                                <ListOrdered className="w-3 h-3 text-emerald-600" />
+                                <span>Cooking Instructions</span>
+                              </span>
+                              <div className="space-y-1 text-xs">
+                                {msg.recipe.instructions.map((step, i) => (
+                                  <div key={i} className="flex items-start gap-2 bg-slate-50/70 p-2 rounded-lg border border-slate-200/60">
+                                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                                      {i + 1}
+                                    </span>
+                                    <span className="text-slate-700 leading-snug">{typeof step === 'string' ? step : step.text}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Action Footer */}
+                          <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => handleAddToGroceryList(msg.recipe)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+                            >
+                              <ShoppingCart className="w-3.5 h-3.5" />
+                              <span>Add to Grocery List</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenRecipeStudio({ recipe: msg.recipe })}
+                              className="text-[11px] font-medium text-slate-500 hover:text-emerald-700 transition-colors cursor-pointer"
+                            >
+                              Open in Studio &rarr;
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Structured Grocery Items Result */}
+                      {msg.groceryItems && msg.groceryItems.length > 0 && (
+                        <div className="mt-3 bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 space-y-2.5 shadow-2xs text-left">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                                <ShoppingCart className="w-3.5 h-3.5" />
+                              </div>
+                              <span className="text-xs font-bold text-slate-900">
+                                Consolidated Grocery List ({msg.groceryItems.length} items)
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                msg.groceryItems.forEach((item) => {
+                                  addManualItem({
+                                    name: item.name || item.canonicalName,
+                                    quantity: item.quantity,
+                                    unit: item.unit,
+                                    category: item.category,
+                                  });
+                                });
+                                refreshGroceryCount();
+                                setGroceryNotice(`Saved ${msg.groceryItems.length} items to your grocery list.`);
+                                setActiveView('grocery_list');
+                              }}
+                              className="text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Save All to List
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+                            {msg.groceryItems.map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200/70">
+                                <div className="flex items-center gap-1.5 truncate pr-2">
+                                  <span className="font-medium text-slate-800 truncate">{item.name || item.canonicalName}</span>
+                                  {item.category && (
+                                    <span className="text-[9px] bg-slate-200/80 text-slate-600 px-1.5 py-0.2 rounded font-medium shrink-0">
+                                      {item.category}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-slate-600 font-semibold shrink-0">
+                                  {[item.quantity, item.unit].filter(Boolean).join(' ')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Structured Price Comparison Result */}
+                      {msg.priceComparison && (
+                        <div className="mt-3 bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 space-y-3 shadow-2xs text-left">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+                                <Sparkles className="w-3.5 h-3.5" />
+                              </div>
+                              <div>
+                                <span className="text-xs font-bold text-slate-900 block leading-tight">
+                                  Marketplace Price Intelligence
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  {msg.priceComparison.pricingAvailable ? 'Live Quick-Commerce Comparison' : 'Shopping Search Directory'}
+                                </span>
+                              </div>
+                            </div>
+                            {msg.priceComparison.comparison?.bestMarketplace && (
+                              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
+                                Best: {msg.priceComparison.comparison.bestMarketplace.toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Multi-store basket totals */}
+                          {msg.priceComparison.comparison?.baskets && Object.keys(msg.priceComparison.comparison.baskets).length > 0 && (
+                            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/70">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                                Store Basket Totals
+                              </span>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                {Object.entries(msg.priceComparison.comparison.baskets).map(([store, basket]) => (
+                                  <div
+                                    key={store}
+                                    className={`p-2 rounded-lg border text-center ${
+                                      store === msg.priceComparison.comparison?.bestMarketplace
+                                        ? 'bg-emerald-50 border-emerald-300 text-emerald-950 shadow-2xs'
+                                        : 'bg-white border-slate-200/80 text-slate-800'
+                                    }`}
+                                  >
+                                    <span className="text-[10px] font-bold uppercase block tracking-wider text-slate-500">{store}</span>
+                                    {basket.total != null && Number(basket.total) > 0 ? (
+                                      <span className="text-xs sm:text-sm font-extrabold block text-slate-900">
+                                        {basket.currency === 'INR' || !basket.currency ? '₹' : basket.currency}{Number(basket.total).toFixed(2)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-slate-400 block font-medium">Incomplete</span>
+                                    )}
+                                    <span className="text-[9px] text-slate-500 block">
+                                      {basket.isComplete ? 'All items in stock' : `${basket.availableItemCount || 0}/${basket.totalItemCount || 0} in stock`}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Item breakdown */}
+                          {Array.isArray(msg.priceComparison.items) && msg.priceComparison.items.length > 0 && (
+                            <div className="space-y-1.5">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                Ingredient Price Breakdown
+                              </span>
+                              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                                {msg.priceComparison.items.map((it, idx) => {
+                                  const bestOffer = it.comparison?.bestOffers?.[0] || it.offers?.[0];
+                                  return (
+                                    <div key={idx} className="bg-slate-50/90 rounded-lg p-2 border border-slate-200/70 text-xs flex items-center justify-between gap-2">
+                                      <div className="truncate">
+                                        <span className="font-semibold text-slate-800 block truncate">{it.name || it.ingredient}</span>
+                                        <span className="text-[10px] text-slate-500">
+                                          {[it.quantity, it.unit].filter(Boolean).join(' ')} &bull; {it.category || 'grocery'}
+                                        </span>
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        {bestOffer ? (
+                                          <div>
+                                            <div className="flex items-center justify-end gap-1.5">
+                                              <span className="text-[10px] font-bold uppercase text-slate-500">
+                                                {bestOffer.displayName || bestOffer.store}
+                                              </span>
+                                              <span className="font-extrabold text-slate-900 text-xs">
+                                                {bestOffer.currency === 'INR' || !bestOffer.currency ? '₹' : bestOffer.currency}{bestOffer.price}
+                                              </span>
+                                            </div>
+                                            {bestOffer.url ? (
+                                              <a
+                                                href={bestOffer.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-[10px] text-emerald-600 hover:text-emerald-700 underline font-medium inline-flex items-center gap-0.5"
+                                              >
+                                                <span>Store Link</span>
+                                                <ExternalLink className="w-2.5 h-2.5" />
+                                              </a>
+                                            ) : (
+                                              <span className={`text-[9px] block ${bestOffer.available ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                                {bestOffer.available ? 'In Stock' : 'Out of Stock'}
+                                              </span>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-[10px] text-slate-400 italic">No offers found</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Detected Zaiqo Intent / Action Card */}
                       {msg.action && (

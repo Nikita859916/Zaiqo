@@ -1,32 +1,6 @@
-/**
- * Zaiqo Centralized Authentication & Session Service
- * 
- * Provides mock authentication, inline validation logic, session persistence,
- * and user state management.
- * Designed to be directly replaceable by a real backend API/OAuth service.
- */
+import api from './api';
 
-const SESSION_KEY = 'zaiqo_auth_session';
-const REGISTERED_USERS_KEY = 'zaiqo_registered_users';
-
-// Simple salt/mock hash for local prototype testing (never stored plaintext in session)
-function mockHash(password) {
-  try {
-    return btoa(unescape(encodeURIComponent(password)));
-  } catch {
-    return password;
-  }
-}
-
-// Initial demo user for quick prototype testing
-const DEFAULT_DEMO_USERS = [
-  {
-    id: 'usr_demo_1',
-    name: 'Zaiqo Explorer',
-    email: 'demo@zaiqo.com',
-    passwordHash: mockHash('wellness123'),
-  },
-];
+const TOKEN_KEY = 'zaiqo_auth_token';
 
 /**
  * Validate email format with standard regex
@@ -45,102 +19,66 @@ export function isValidPassword(password) {
 }
 
 /**
- * Get all registered mock users from localStorage
+ * Retrieve stored JWT token
  */
-function getRegisteredUsers() {
-  try {
-    if (typeof window === 'undefined' || !window.localStorage) {
-      return [...DEFAULT_DEMO_USERS];
-    }
-    const raw = window.localStorage.getItem(REGISTERED_USERS_KEY);
-    if (!raw) {
-      window.localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(DEFAULT_DEMO_USERS));
-      return [...DEFAULT_DEMO_USERS];
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [...DEFAULT_DEMO_USERS];
-  } catch {
-    return [...DEFAULT_DEMO_USERS];
-  }
-}
-
-/**
- * Save registered mock users to localStorage
- */
-function saveRegisteredUsers(users) {
-  try {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    window.localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(users));
-  } catch (err) {
-    console.error('Failed to save registered users', err);
-  }
-}
-
-/**
- * Get current session from localStorage
- * Returns only { id, name, email } - no passwords
- */
-export function getCurrentSession() {
+export function getToken() {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return null;
-    const raw = window.localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const session = JSON.parse(raw);
-    if (session && session.id && session.email) {
-      return {
-        id: session.id,
-        name: session.name || 'Zaiqo User',
-        email: session.email,
-      };
-    }
-    return null;
+    return window.localStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
   }
 }
 
 /**
- * Set current session in localStorage
+ * Store JWT token
  */
-export function setSession(user) {
+export function setToken(token) {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
-    const sessionData = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-    };
-    window.localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
-  } catch (err) {
-    console.error('Failed to set session', err);
+    if (token) {
+      window.localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      window.localStorage.removeItem(TOKEN_KEY);
+    }
+  } catch {
+    // Storage access gracefully ignored
   }
 }
 
 /**
- * Clear session on logout
+ * Remove stored JWT token and clear legacy session markers
  */
-export function clearSession() {
+export function removeToken() {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
-    window.localStorage.removeItem(SESSION_KEY);
-  } catch (err) {
-    console.error('Failed to clear session', err);
+    window.localStorage.removeItem(TOKEN_KEY);
+    window.localStorage.removeItem('zaiqo_auth_session');
+    window.localStorage.removeItem('zaiqo_registered_users');
+  } catch {
+    // Storage access gracefully ignored
   }
 }
 
 /**
- * Check if a session exists
+ * Check if an active token is stored
  */
 export function isAuthenticated() {
-  return Boolean(getCurrentSession());
+  return Boolean(getToken());
 }
 
 /**
- * Register a new user
+ * Register a new user via POST /api/auth/signup
  */
-export async function signup({ name, email, password }) {
-  // Simulate small network delay (200ms)
-  await new Promise((resolve) => setTimeout(resolve, 200));
+export async function signup(payloadOrName, email, password) {
+  let name;
+  if (typeof payloadOrName === 'object' && payloadOrName !== null) {
+    name = payloadOrName.name;
+    email = payloadOrName.email;
+    password = payloadOrName.password;
+  } else {
+    name = payloadOrName;
+  }
 
   const trimmedName = (name || '').trim();
   const trimmedEmail = (email || '').trim().toLowerCase();
@@ -154,43 +92,55 @@ export async function signup({ name, email, password }) {
   }
 
   if (!isValidPassword(password)) {
-    throw new Error('Password must be at least 6 characters.');
+    throw new Error('Password must be at least 6 characters long.');
   }
 
-  const users = getRegisteredUsers();
-  const existing = users.find((u) => u.email.toLowerCase() === trimmedEmail);
+  try {
+    const payload = {
+      name: trimmedName,
+      email: trimmedEmail,
+      password,
+    };
+    if (typeof payloadOrName === 'object' && payloadOrName?.preferences) {
+      payload.preferences = payloadOrName.preferences;
+    }
 
-  if (existing) {
-    throw new Error('An account with this email already exists. Please log in.');
+    const response = await api.post('/auth/signup', payload);
+
+    const responseData = response.data?.data || response.data || {};
+    const { token, user } = responseData;
+
+    if (token) {
+      setToken(token);
+    }
+
+    return user;
+  } catch (error) {
+    if (!error.response) {
+      throw new Error('Unable to connect to server. Please check your internet connection.');
+    }
+    const errorMsg =
+      error.response?.data?.message ||
+      (error.response?.status === 409
+        ? 'An account with this email already exists. Please log in.'
+        : error.response?.status === 503
+        ? 'Database service is currently unavailable. Please try again shortly.'
+        : 'Failed to create account. Please try again.');
+    throw new Error(errorMsg);
   }
-
-  const newUser = {
-    id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-    name: trimmedName,
-    email: trimmedEmail,
-    passwordHash: mockHash(password),
-  };
-
-  users.push(newUser);
-  saveRegisteredUsers(users);
-
-  // Set session with safe user object (no password)
-  const sessionUser = {
-    id: newUser.id,
-    name: newUser.name,
-    email: newUser.email,
-  };
-
-  setSession(sessionUser);
-  return sessionUser;
 }
 
 /**
- * Authenticate existing user
+ * Authenticate existing user via POST /api/auth/login
  */
-export async function login({ email, password }) {
-  // Simulate small network delay (200ms)
-  await new Promise((resolve) => setTimeout(resolve, 200));
+export async function login(payloadOrEmail, password) {
+  let email;
+  if (typeof payloadOrEmail === 'object' && payloadOrEmail !== null) {
+    email = payloadOrEmail.email;
+    password = payloadOrEmail.password;
+  } else {
+    email = payloadOrEmail;
+  }
 
   const trimmedEmail = (email || '').trim().toLowerCase();
 
@@ -206,30 +156,64 @@ export async function login({ email, password }) {
     throw new Error('Please enter your password.');
   }
 
-  const users = getRegisteredUsers();
-  const targetHash = mockHash(password);
+  try {
+    const response = await api.post('/auth/login', {
+      email: trimmedEmail,
+      password,
+    });
 
-  const matched = users.find(
-    (u) => u.email.toLowerCase() === trimmedEmail && u.passwordHash === targetHash
-  );
+    const responseData = response.data?.data || response.data || {};
+    const { token, user } = responseData;
 
-  if (!matched) {
-    throw new Error('Invalid email or password. Please verify your credentials.');
+    if (token) {
+      setToken(token);
+    }
+
+    return user;
+  } catch (error) {
+    if (!error.response) {
+      throw new Error('Unable to connect to server. Please check your internet connection.');
+    }
+    const errorMsg =
+      error.response?.data?.message ||
+      (error.response?.status === 401
+        ? 'Invalid email or password. Please verify your credentials.'
+        : error.response?.status === 503
+        ? 'Database service is currently unavailable. Please try again shortly.'
+        : 'Failed to sign in. Please check your credentials.');
+    throw new Error(errorMsg);
   }
-
-  const sessionUser = {
-    id: matched.id,
-    name: matched.name,
-    email: matched.email,
-  };
-
-  setSession(sessionUser);
-  return sessionUser;
 }
 
 /**
- * Log out user
+ * Retrieve authenticated user profile via GET /api/auth/me
+ */
+export async function getCurrentUser() {
+  const token = getToken();
+  if (!token) return null;
+
+  try {
+    const response = await api.get('/auth/me');
+    return response.data?.data?.user || response.data?.user || null;
+  } catch (error) {
+    // If token expired or invalid, clear token and return null
+    if (error.response?.status === 401) {
+      removeToken();
+    }
+    return null;
+  }
+}
+
+/**
+ * Alias for backward compatibility
+ */
+export function getCurrentSession() {
+  return null;
+}
+
+/**
+ * Log out user by clearing stored JWT and state
  */
 export function logout() {
-  clearSession();
+  removeToken();
 }

@@ -59,9 +59,27 @@ class ZaiActionService {
         const aiProvider = getDefaultAiRecipeProvider();
         if (parameters.generateRecipe && aiProvider.isConfigured()) {
           try {
+            // Inherit user profile defaults when explicit prompt parameter is omitted
+            const actionParams = { ...parameters };
+            if (actionParams.servings === undefined || actionParams.servings === null) {
+              if (context?.defaultServings && typeof context.defaultServings === 'number') {
+                actionParams.servings = context.defaultServings;
+              }
+            }
+            if (actionParams.budgetTier === undefined || actionParams.budgetTier === null) {
+              if (context?.budgetTier) {
+                actionParams.budgetTier = context.budgetTier;
+              }
+            }
+            if (actionParams.householdSize === undefined || actionParams.householdSize === null) {
+              if (context?.householdSize) {
+                actionParams.householdSize = context.householdSize;
+              }
+            }
+
             const result = await recipeIntelligenceService.generatePersonalizedRecipe(
               userId,
-              parameters,
+              actionParams,
               { persist: Boolean(parameters.persist || parameters.save) }
             );
 
@@ -97,10 +115,19 @@ class ZaiActionService {
 
               if (parameters.includePricing) {
                 try {
+                  // Explicit prompt marketplace filter overrides profile preference.
+                  // When no explicit marketplace was in the prompt, pass null so all adapters remain eligible for comparison.
+                  const explicitMarketplace = parameters.preferredMarketplace || parameters.marketplace || null;
+                  const effectivePreferredMarketplace = explicitMarketplace || context?.preferredMarketplace || 'any';
+
                   priceComparison = await recipeGroceryService.getRecipePriceComparison(
                     recipe,
-                    parameters.preferredMarketplace || null
+                    explicitMarketplace,
+                    { ...context, preferredMarketplace: effectivePreferredMarketplace }
                   );
+                  if (priceComparison && typeof priceComparison === 'object') {
+                    priceComparison.preferredMarketplace = effectivePreferredMarketplace;
+                  }
                 } catch (pErr) {
                   pricingError = pErr.message || 'Failed to compare prices';
                 }
@@ -148,6 +175,10 @@ class ZaiActionService {
                     pricingFailed: Boolean(pricingError),
                     groceryError: groceryError || null,
                     pricingError: pricingError || null,
+                    preferredMarketplace: parameters.preferredMarketplace || context?.preferredMarketplace || 'any',
+                    budgetTier: actionParams.budgetTier || 'balanced',
+                    servings: recipe.servings || actionParams.servings || 2,
+                    householdSize: context?.householdSize || 1,
                   },
                 },
               };
@@ -341,11 +372,17 @@ class ZaiActionService {
 
         // 5. Shopping Links (Price Intelligence Phase 1)
         if (parameters.queryType === 'shopping_links') {
+          const explicitMarketplace = parameters.marketplace || parameters.preferredMarketplace || null;
+          const effectivePreferredMarketplace = explicitMarketplace || context?.preferredMarketplace || 'any';
+
           if (parameters.item) {
             const itemLinks = priceIntelligenceService.getItemShoppingLinks(
               parameters.item,
-              parameters.marketplace
+              explicitMarketplace
             );
+            if (itemLinks && typeof itemLinks === 'object') {
+              itemLinks.preferredMarketplace = effectivePreferredMarketplace;
+            }
             return {
               message: `Here are shopping search links for ${parameters.item}:`,
               data: itemLinks,
@@ -374,8 +411,11 @@ class ZaiActionService {
           const shoppingLinks = await priceIntelligenceService.getShoppingLinksForList(
             userId,
             targetList._id,
-            parameters.marketplace
+            explicitMarketplace
           );
+          if (shoppingLinks && typeof shoppingLinks === 'object') {
+            shoppingLinks.preferredMarketplace = effectivePreferredMarketplace;
+          }
 
           const itemCount = shoppingLinks.items ? shoppingLinks.items.length : 0;
           return {
@@ -386,11 +426,18 @@ class ZaiActionService {
 
         // 6. Price Comparison (Phase 2 & Phase 3)
         if (parameters.queryType === 'price_comparison') {
+          const explicitMarketplace = parameters.marketplace || parameters.preferredMarketplace || null;
+          const effectivePreferredMarketplace = explicitMarketplace || context?.preferredMarketplace || 'any';
+
           if (parameters.item) {
             const comparison = priceIntelligenceService.getItemPriceComparison(
               parameters.item,
-              parameters.marketplace
+              explicitMarketplace,
+              { ...context, preferredMarketplace: effectivePreferredMarketplace }
             );
+            if (comparison && typeof comparison === 'object') {
+              comparison.preferredMarketplace = effectivePreferredMarketplace;
+            }
             const bestOffer = comparison.comparison?.bestOffers?.[0];
             const storeName = bestOffer?.displayName || comparison.comparison?.bestMarketplace || 'Swiggy Instamart';
             const priceVal = comparison.comparison?.bestPrice;
@@ -426,8 +473,12 @@ class ZaiActionService {
           const comparison = await priceIntelligenceService.getPriceComparisonForList(
             userId,
             targetList._id,
-            parameters.marketplace
+            explicitMarketplace,
+            { ...context, preferredMarketplace: effectivePreferredMarketplace }
           );
+          if (comparison && typeof comparison === 'object') {
+            comparison.preferredMarketplace = effectivePreferredMarketplace;
+          }
 
           const message = comparison.pricingAvailable
             ? `Price comparison completed for your grocery list "${targetList.name}".`

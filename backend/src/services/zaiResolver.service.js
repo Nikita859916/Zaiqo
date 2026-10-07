@@ -225,7 +225,7 @@ class ZaiResolverService {
 
     const isRecipeGenerationIntent =
       !isExplicitStandaloneRecipeGrocery &&
-      (/\b(suggest\s+.*(?:dinner|lunch|breakfast|meal|recipe|recipes|ideas?|something)|what\s+should\s+i\s+(?:eat|have|cook)|what\s+can\s+i\s+(?:make|cook)|recipe\s+with|recipes?\s+(?:for|with|suitable)|generate\s+(?:a\s+)?(?:recipe|dinner|lunch|breakfast|meal)|(?:make|cook)\s+(?:a\s+)?[a-z\s-]+\s+recipe|cook\s+something\s+with|i\s+have\s+.*suggest|give\s+me\s+.*(?:dinner|lunch|breakfast|meal|recipe|recipes|ideas?|something)|make\s+it\s+(?:under|quick|vegetarian|vegan|indian|spicier)|something\s+(?:quick|different|under|vegetarian|healthy|indian)|diabetes-friendly|low-sodium|avoiding\s+gluten|suitable\s+for\s+someone\s+avoiding|healthy\s+(?:dinner|lunch|breakfast)|vegetarian\s+(?:dinner|lunch|breakfast)|vegan\s+(?:dinner|lunch|breakfast))\b/i.test(
+      (/\b(suggest\s+.*(?:dinner|lunch|breakfast|meal|recipe|recipes|ideas?|something)|what\s+should\s+i\s+(?:eat|have|cook)|what\s+can\s+i\s+(?:make|cook)|recipe\s+with|recipes?\s+(?:for|with|suitable)|generate\s+(?:a\s+)?(?:recipe|dinner|lunch|breakfast|meal)|(?:make|cook)\s+(?:a\s+)?[a-z\s-]+\s+recipe|cook\s+something\s+with|i\s+have\s+.*suggest|give\s+me\s+.*(?:dinner|lunch|breakfast|meal|recipe|recipes|ideas?|something)|make\s+(?:it|this)\s+(?:under|quick|vegetarian|vegan|indian|spicier|for\s+\d+)|something\s+(?:quick|different|under|vegetarian|healthy|indian)|diabetes-friendly|low-sodium|avoiding\s+gluten|suitable\s+for\s+someone\s+avoiding|healthy\s+(?:dinner|lunch|breakfast)|vegetarian\s+(?:dinner|lunch|breakfast)|vegan\s+(?:dinner|lunch|breakfast)|(?:premium|budget-friendly|budget\s+friendly)\s+(?:dinner|lunch|breakfast|meal|recipe|recipes))\b/i.test(
         lower
       ) ||
       /\b(?:dinner|lunch|breakfast|khana|recipe)\s+(?:batao|banao|bana\s+do|dikhao|chahiye)\b/i.test(lower) ||
@@ -400,6 +400,17 @@ class ZaiResolverService {
         parameters.healthGoal = 'high-protein';
       }
 
+      // Budget tier extraction
+      if (lower.includes('budget-friendly') || lower.includes('budget friendly') || lower.includes('low budget') || lower.includes('sasta')) {
+        parameters.budgetTier = 'budget-friendly';
+      } else if (lower.includes('premium') || lower.includes('high-end') || lower.includes('high end')) {
+        parameters.budgetTier = 'premium';
+      } else if (lower.includes('balanced')) {
+        parameters.budgetTier = 'balanced';
+      } else if (lower.includes('no-preference') || lower.includes('no preference')) {
+        parameters.budgetTier = 'no-preference';
+      }
+
       // Target marketplace if explicitly specified
       if (lower.includes('blinkit')) parameters.preferredMarketplace = 'blinkit';
       else if (lower.includes('zepto')) parameters.preferredMarketplace = 'zepto';
@@ -416,14 +427,14 @@ class ZaiResolverService {
     // 7. GROCERY_LIST Detection
     // Matches standalone grocery / shopping list requests, marketplace shopping links, and price comparison
     if (
-      /\b(grocery\s+list|shopping\s+list|groceries|create\s+(?:my\s+)?grocery|add\s+.*to\s+(?:my\s+)?(?:grocery|shopping)\s+list|what\s+do\s+i\s+need\s+to\s+buy|where\s+(?:can\s+i|i\s+can|to)\s+(?:buy|get)|shopping\s+links?|open\s+(?:grocery\s+shopping|blinkit|zepto|jiomart|instamart)|shopping\s+options|compare\s+prices?|cheapest\s+(?:store|app|option|price|basket|place)|which\s+(?:store|app)\s+is\s+cheapest|which\s+(?:store|app)\s+has\s+the\s+cheapest)\b/i.test(
+      /\b(grocery\s+list|shopping\s+list|groceries|create\s+(?:my\s+)?grocery|add\s+.*to\s+(?:my\s+)?(?:grocery|shopping)\s+list|what\s+do\s+i\s+need\s+to\s+buy|where\s+(?:can\s+i|i\s+can|to)\s+(?:buy|get)|shopping\s+links?|open\s+(?:grocery\s+shopping|blinkit|zepto|jiomart|instamart)|shopping\s+options|compare\s+(?:grocery\s+)?prices?|grocery\s+prices?|cheapest\s+(?:store|app|option|price|basket|place)|which\s+(?:store|app)\s+is\s+cheapest|which\s+(?:store|app)\s+has\s+the\s+cheapest)\b/i.test(
         lower
       )
     ) {
       const parameters = {};
 
       const isPriceComparisonIntent =
-        /\b(compare\s+prices?|which\s+(?:store|app)\s+is\s+cheapest|which\s+(?:store|app)\s+has\s+the\s+cheapest)\b/i.test(
+        /\b(compare\s+(?:grocery\s+)?prices?|grocery\s+prices?|which\s+(?:store|app)\s+is\s+cheapest|which\s+(?:store|app)\s+has\s+the\s+cheapest)\b/i.test(
           lower
         ) || (/\bcheapest\b/i.test(lower) && /\b(where|store|app|price|buy|grocery|groceries|basket|paneer|milk|rice|tofu|item)\b/i.test(lower));
 

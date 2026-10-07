@@ -1,10 +1,4 @@
-/**
- * Recipe Service & Mock Generation Layer
- * 
- * Provides structured recipe generation based on meal type, dietary preferences,
- * cooking time, and available ingredients.
- * Designed for future drop-in replacement by Gemini structured output API.
- */
+import api from './api.js';
 
 const sampleRecipes = [
   {
@@ -168,7 +162,71 @@ const sampleRecipes = [
  * Generate a recipe based on user input parameters
  */
 export async function generateMockRecipe(params = {}) {
-  // Simulate network / AI generation latency (600ms)
+  // Check for authenticated user session to attempt live AI recipe intelligence
+  let token = null;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      token = window.localStorage.getItem('zaiqo_auth_token');
+    }
+  } catch {
+    // Storage access gracefully ignored
+  }
+
+  if (token) {
+    try {
+      const rawIngredients = params.ingredients || '';
+      const availableIngredients = Array.isArray(rawIngredients)
+        ? rawIngredients
+        : typeof rawIngredients === 'string' && rawIngredients.trim()
+        ? rawIngredients.split(/[,]+/).map((s) => s.trim()).filter(Boolean)
+        : [];
+
+      const payload = {
+        mealType: (params.mealType || 'dinner').toLowerCase(),
+        servings: Number(params.servings) || 2,
+        availableIngredients,
+      };
+
+      if (params.dietaryPreference && params.dietaryPreference !== 'No Preference') {
+        payload.dietaryRestrictions = [params.dietaryPreference.toLowerCase()];
+      }
+
+      if (params.maxCookingTime) {
+        payload.maxCookingTime = params.maxCookingTime;
+      }
+
+      const response = await api.post('/recipes/generate', payload);
+      if (response?.data?.success && response.data.data) {
+        const r = response.data.data;
+        return {
+          id: r._id || r.id || `rec_${Date.now()}`,
+          name: r.name || r.title || 'Personalized Recipe',
+          description: r.description || '',
+          mealType: r.mealType || params.mealType || 'Dinner',
+          dietaryPreference: r.dietaryPreference || params.dietaryPreference || 'No Preference',
+          prepTime: r.prepTime || '10 mins',
+          cookTime: r.cookTime || r.totalTime || '15 mins',
+          servings: r.servings || 2,
+          nutrition: r.nutrition || null,
+          ingredients: Array.isArray(r.ingredients)
+            ? r.ingredients.map((ing) => ({
+                item: ing.name || ing.item,
+                name: ing.name || ing.item,
+                quantity: ing.quantity ? `${ing.quantity} ${ing.unit || ''}`.trim() : (ing.unit || '1 portion'),
+              }))
+            : [],
+          instructions: Array.isArray(r.instructions)
+            ? r.instructions.map((step) => (typeof step === 'string' ? step : step.text || ''))
+            : [],
+          zaiNote: r.zaiNote || 'Generated via Zai Recipe Intelligence engine.',
+        };
+      }
+    } catch (err) {
+      console.warn('[Recipe Service] Live recipe generation unavailable, falling back to local synthesizer:', err?.message);
+    }
+  }
+
+  // Simulate network / AI generation latency (600ms) for local fallback
   await new Promise((resolve) => setTimeout(resolve, 600));
 
   const {

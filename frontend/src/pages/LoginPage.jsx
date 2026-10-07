@@ -59,7 +59,8 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email, password);
-      navigate('/dashboard', { replace: true });
+      const destination = location.state?.from?.pathname || '/dashboard';
+      navigate(destination, { replace: true });
     } catch (err) {
       setFormError(err.message || 'Failed to sign in. Please check your credentials.');
     } finally {

@@ -157,6 +157,22 @@ export const validateStructuredAction = (raw) => {
           sanitizedParams.preferredMarketplace = rawParams.preferredMarketplace.trim().toLowerCase();
         }
       }
+
+      if (rawParams.budgetTier !== undefined && rawParams.budgetTier !== null) {
+        if (typeof rawParams.budgetTier === 'string') {
+          const bt = rawParams.budgetTier.trim().toLowerCase();
+          if (['budget-friendly', 'balanced', 'premium', 'no-preference'].includes(bt)) {
+            sanitizedParams.budgetTier = bt;
+          }
+        }
+      }
+
+      if (rawParams.householdSize !== undefined && rawParams.householdSize !== null) {
+        const hs = Number(rawParams.householdSize);
+        if (Number.isFinite(hs) && hs >= 1 && hs <= 20) {
+          sanitizedParams.householdSize = Math.round(hs);
+        }
+      }
       break;
     }
 
@@ -303,6 +319,19 @@ export const validateStructuredAction = (raw) => {
       if (rawParams.marketplace !== undefined && rawParams.marketplace !== null) {
         if (typeof rawParams.marketplace === 'string') {
           sanitizedParams.marketplace = rawParams.marketplace.trim().toLowerCase();
+        }
+      }
+      if (rawParams.preferredMarketplace !== undefined && rawParams.preferredMarketplace !== null) {
+        if (typeof rawParams.preferredMarketplace === 'string') {
+          sanitizedParams.preferredMarketplace = rawParams.preferredMarketplace.trim().toLowerCase();
+        }
+      }
+      if (rawParams.budgetTier !== undefined && rawParams.budgetTier !== null) {
+        if (typeof rawParams.budgetTier === 'string') {
+          const bt = rawParams.budgetTier.trim().toLowerCase();
+          if (['budget-friendly', 'balanced', 'premium', 'no-preference'].includes(bt)) {
+            sanitizedParams.budgetTier = bt;
+          }
         }
       }
       if (rawParams.listId !== undefined && rawParams.listId !== null) {

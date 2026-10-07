@@ -109,38 +109,41 @@ export default function RecipeCard({
         </div>
 
         {/* 3. Nutrition Breakdown Grid */}
-        <div className="bg-slate-50/90 rounded-2xl p-4 border border-slate-200/80">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
-            <Flame className="w-3.5 h-3.5 text-amber-500" />
-            <span>Macro &amp; Caloric Profile</span>
+        {/* 3. Nutrition Breakdown Grid (Only rendered when nutrition is available; never invented) */}
+        {recipe.nutrition && (recipe.nutrition.calories != null || recipe.nutrition.protein != null || recipe.nutrition.carbohydrates != null || recipe.nutrition.fats != null) && (
+          <div className="bg-slate-50/90 rounded-2xl p-4 border border-slate-200/80">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
+              <Flame className="w-3.5 h-3.5 text-amber-500" />
+              <span>Macro &amp; Caloric Profile (Per Serving)</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
+                <span className="block text-[11px] text-slate-400 font-medium">Calories</span>
+                <span className="text-base sm:text-lg font-black text-slate-900">
+                  {recipe.nutrition?.calories != null ? `${recipe.nutrition.calories} kcal` : 'N/A'}
+                </span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
+                <span className="block text-[11px] text-slate-400 font-medium">Protein</span>
+                <span className="text-base sm:text-lg font-black text-emerald-700">
+                  {recipe.nutrition?.protein != null ? (typeof recipe.nutrition.protein === 'number' ? `${recipe.nutrition.protein}g` : recipe.nutrition.protein) : 'N/A'}
+                </span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
+                <span className="block text-[11px] text-slate-400 font-medium">Carbohydrates</span>
+                <span className="text-base sm:text-lg font-black text-teal-700">
+                  {recipe.nutrition?.carbohydrates != null ? (typeof recipe.nutrition.carbohydrates === 'number' ? `${recipe.nutrition.carbohydrates}g` : recipe.nutrition.carbohydrates) : 'N/A'}
+                </span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
+                <span className="block text-[11px] text-slate-400 font-medium">Fats</span>
+                <span className="text-base sm:text-lg font-black text-amber-700">
+                  {recipe.nutrition?.fats != null ? (typeof recipe.nutrition.fats === 'number' ? `${recipe.nutrition.fats}g` : recipe.nutrition.fats) : 'N/A'}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-            <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
-              <span className="block text-[11px] text-slate-400 font-medium">Calories</span>
-              <span className="text-base sm:text-lg font-black text-slate-900">
-                {recipe.nutrition?.calories || 420}
-              </span>
-            </div>
-            <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
-              <span className="block text-[11px] text-slate-400 font-medium">Protein</span>
-              <span className="text-base sm:text-lg font-black text-emerald-700">
-                {recipe.nutrition?.protein || '28g'}
-              </span>
-            </div>
-            <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
-              <span className="block text-[11px] text-slate-400 font-medium">Carbohydrates</span>
-              <span className="text-base sm:text-lg font-black text-teal-700">
-                {recipe.nutrition?.carbohydrates || '34g'}
-              </span>
-            </div>
-            <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs">
-              <span className="block text-[11px] text-slate-400 font-medium">Fats</span>
-              <span className="text-base sm:text-lg font-black text-amber-700">
-                {recipe.nutrition?.fats || '16g'}
-              </span>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* 4. Ingredients & Instructions Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2">
@@ -153,8 +156,8 @@ export default function RecipeCard({
             <div className="bg-white rounded-2xl border border-slate-200/80 divide-y divide-slate-100 overflow-hidden text-xs">
               {recipe.ingredients?.map((ing, idx) => (
                 <div key={idx} className="flex items-center justify-between p-3">
-                  <span className="font-medium text-slate-800">{ing.item}</span>
-                  <span className="text-slate-500 font-semibold">{ing.quantity}</span>
+                  <span className="font-medium text-slate-800">{ing.name || ing.item}</span>
+                  <span className="text-slate-500 font-semibold">{[ing.quantity, ing.unit].filter(Boolean).join(' ')}</span>
                 </div>
               ))}
             </div>

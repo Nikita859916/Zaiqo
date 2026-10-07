@@ -40,6 +40,22 @@ export const STANDARD_CUISINES = [
   'other',
 ];
 
+export const VALID_BUDGET_TIERS = [
+  'budget-friendly',
+  'balanced',
+  'premium',
+  'no-preference',
+];
+
+export const VALID_PREFERRED_MARKETPLACES = [
+  'instamart',
+  'blinkit',
+  'zepto',
+  'jiomart',
+  'any',
+];
+
+
 /**
  * Normalizes and validates incoming preference payload
  * @param {Object} input - Raw input body
@@ -51,6 +67,18 @@ export const validatePreferenceInput = (input, isPartial = false) => {
     return {
       isValid: false,
       error: 'Preference data must be a valid JSON object.',
+    };
+  }
+
+  // Prototype pollution defense
+  if (
+    Object.prototype.hasOwnProperty.call(input, '__proto__') ||
+    Object.prototype.hasOwnProperty.call(input, 'constructor') ||
+    Object.prototype.hasOwnProperty.call(input, 'prototype')
+  ) {
+    return {
+      isValid: false,
+      error: 'Prototype pollution attempt detected.',
     };
   }
 
@@ -309,6 +337,84 @@ export const validatePreferenceInput = (input, isPartial = false) => {
 
       sanitized.dailyNutritionTargets = targets;
     }
+  }
+
+  // 9. Household Size (Integer between 1 and 20, default 1)
+  if (input.householdSize !== undefined) {
+    if (
+      typeof input.householdSize !== 'number' ||
+      !Number.isFinite(input.householdSize) ||
+      !Number.isInteger(input.householdSize) ||
+      input.householdSize < 1 ||
+      input.householdSize > 20
+    ) {
+      return {
+        isValid: false,
+        error: 'Household size must be an integer between 1 and 20.',
+      };
+    }
+    sanitized.householdSize = input.householdSize;
+  } else if (!isPartial) {
+    sanitized.householdSize = 1;
+  }
+
+  // 10. Default Servings (Integer between 1 and 20, default 2)
+  if (input.defaultServings !== undefined) {
+    if (
+      typeof input.defaultServings !== 'number' ||
+      !Number.isFinite(input.defaultServings) ||
+      !Number.isInteger(input.defaultServings) ||
+      input.defaultServings < 1 ||
+      input.defaultServings > 20
+    ) {
+      return {
+        isValid: false,
+        error: 'Default servings must be an integer between 1 and 20.',
+      };
+    }
+    sanitized.defaultServings = input.defaultServings;
+  } else if (!isPartial) {
+    sanitized.defaultServings = 2;
+  }
+
+  // 11. Budget Tier (Enum: budget-friendly, balanced, premium, no-preference, default balanced)
+  if (input.budgetTier !== undefined) {
+    if (typeof input.budgetTier !== 'string') {
+      return {
+        isValid: false,
+        error: 'Budget tier must be a string.',
+      };
+    }
+    const val = input.budgetTier.trim().toLowerCase();
+    if (!VALID_BUDGET_TIERS.includes(val)) {
+      return {
+        isValid: false,
+        error: `Invalid budget tier "${input.budgetTier}". Allowed: ${VALID_BUDGET_TIERS.join(', ')}`,
+      };
+    }
+    sanitized.budgetTier = val;
+  } else if (!isPartial) {
+    sanitized.budgetTier = 'balanced';
+  }
+
+  // 12. Preferred Marketplace (Enum: instamart, blinkit, zepto, jiomart, any, default any)
+  if (input.preferredMarketplace !== undefined) {
+    if (typeof input.preferredMarketplace !== 'string') {
+      return {
+        isValid: false,
+        error: 'Preferred marketplace must be a string.',
+      };
+    }
+    const val = input.preferredMarketplace.trim().toLowerCase();
+    if (!VALID_PREFERRED_MARKETPLACES.includes(val)) {
+      return {
+        isValid: false,
+        error: `Invalid preferred marketplace "${input.preferredMarketplace}". Allowed: ${VALID_PREFERRED_MARKETPLACES.join(', ')}`,
+      };
+    }
+    sanitized.preferredMarketplace = val;
+  } else if (!isPartial) {
+    sanitized.preferredMarketplace = 'any';
   }
 
   return {

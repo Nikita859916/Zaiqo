@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import preferenceService from './preference.service.js';
 import foodDiaryService from './foodDiary.service.js';
 import recipeService from './recipe.service.js';
-import geminiService from './gemini.service.js';
+import geminiService, { sanitizeUserContext } from './gemini.service.js';
 import aiRecipeService from './ai/aiRecipe.service.js';
 import {
   validateGeneratedRecipeData,
@@ -38,16 +38,8 @@ class RecipeIntelligenceService {
       foodDiaryService.getHistory(userId, { limit: 10 }).catch(() => []),
     ]);
 
-    // 1. User preferences context (only existing fields, sanitized)
-    const userPreferences = {
-      dietaryPreference: preferences?.dietaryPreference || 'no-preference',
-      allergies: Array.isArray(preferences?.allergies) ? preferences.allergies : [],
-      foodsToAvoid: Array.isArray(preferences?.foodsToAvoid) ? preferences.foodsToAvoid : [],
-      preferredCuisines: Array.isArray(preferences?.preferredCuisines) ? preferences.preferredCuisines : [],
-      cookingTime: preferences?.cookingTime || 'no-preference',
-      spiceLevel: preferences?.spiceLevel || 'medium',
-      wellnessGoals: Array.isArray(preferences?.wellnessGoals) ? preferences.wellnessGoals : [],
-    };
+    // 1. User preferences context (sanitized via sanitizeUserContext)
+    const userPreferences = sanitizeUserContext(preferences);
 
     // 2. Daily summary and consumed totals
     const dailyTotals = dailySummary?.totals || {
@@ -105,6 +97,29 @@ class RecipeIntelligenceService {
       parameters.healthGoal ||
       (userPreferences.wellnessGoals.length > 0 ? userPreferences.wellnessGoals[0] : null);
 
+    // Servings: explicit prompt parameter always wins, otherwise profile defaultServings (default 2)
+    let effectiveServings = userPreferences.defaultServings || 2;
+    if (parameters.servings !== undefined && parameters.servings !== null) {
+      const parsed = Number(parameters.servings);
+      if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 50) {
+        effectiveServings = Math.round(parsed);
+      }
+    }
+
+    // Budget tier: explicit prompt parameter wins, otherwise profile budgetTier (default 'balanced')
+    const effectiveBudgetTier =
+      parameters.budgetTier && typeof parameters.budgetTier === 'string'
+        ? parameters.budgetTier.trim().toLowerCase()
+        : userPreferences.budgetTier || 'balanced';
+
+    // Preferred marketplace: explicit prompt parameter wins, otherwise profile preferredMarketplace (default 'any')
+    const effectiveMarketplace =
+      parameters.preferredMarketplace && typeof parameters.preferredMarketplace === 'string'
+        ? parameters.preferredMarketplace.trim().toLowerCase()
+        : (parameters.marketplace && typeof parameters.marketplace === 'string'
+            ? parameters.marketplace.trim().toLowerCase()
+            : userPreferences.preferredMarketplace || 'any');
+
     return {
       userId,
       userPreferences,
@@ -115,7 +130,11 @@ class RecipeIntelligenceService {
         remaining: nutritionBalance.remaining,
       },
       mealType: targetMealType,
-      servings: parameters.servings ? Number(parameters.servings) : 2,
+      servings: effectiveServings,
+      householdSize: userPreferences.householdSize || 1,
+      defaultServings: userPreferences.defaultServings || 2,
+      budgetTier: effectiveBudgetTier,
+      preferredMarketplace: effectiveMarketplace,
       recentMeals: recentDishes,
       requestedIngredients,
       cookingTime,

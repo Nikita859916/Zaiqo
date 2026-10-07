@@ -4,6 +4,8 @@ import {
   VALID_WELLNESS_GOALS,
   VALID_COOKING_TIMES,
   VALID_SPICE_LEVELS,
+  VALID_BUDGET_TIERS,
+  VALID_PREFERRED_MARKETPLACES,
 } from '../utils/preferenceValidation.js';
 
 const userPreferenceSchema = new mongoose.Schema(
@@ -96,6 +98,38 @@ const userPreferenceSchema = new mongoose.Schema(
         max: [1000, 'Fats cannot exceed 1000g'],
         default: null,
       },
+    },
+    householdSize: {
+      type: Number,
+      min: [1, 'Household size must be at least 1'],
+      max: [20, 'Household size cannot exceed 20'],
+      default: 1,
+    },
+    defaultServings: {
+      type: Number,
+      min: [1, 'Default servings must be at least 1'],
+      max: [20, 'Default servings cannot exceed 20'],
+      default: 2,
+    },
+    budgetTier: {
+      type: String,
+      enum: {
+        values: VALID_BUDGET_TIERS,
+        message: '{VALUE} is not a valid budget tier',
+      },
+      default: 'balanced',
+      lowercase: true,
+      trim: true,
+    },
+    preferredMarketplace: {
+      type: String,
+      enum: {
+        values: VALID_PREFERRED_MARKETPLACES,
+        message: '{VALUE} is not a valid preferred marketplace',
+      },
+      default: 'any',
+      lowercase: true,
+      trim: true,
     },
   },
   {

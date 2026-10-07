@@ -8,6 +8,15 @@ import { SUPPORTED_ACTIONS } from '../utils/zaiActionContract.js';
  * @param {Object|null} rawPreferences
  * @returns {Object}
  */
+const VALID_BUDGET_TIERS_SET = new Set(['budget-friendly', 'balanced', 'premium', 'no-preference']);
+const VALID_MARKETPLACES_SET = new Set(['instamart', 'blinkit', 'zepto', 'jiomart', 'any']);
+
+/**
+ * Sanitizes user preference object to ensure no sensitive fields or internal database IDs
+ * are passed to external AI services.
+ * @param {Object|null} rawPreferences
+ * @returns {Object}
+ */
 export const sanitizeUserContext = (rawPreferences) => {
   if (!rawPreferences || typeof rawPreferences !== 'object') {
     return {
@@ -18,34 +27,124 @@ export const sanitizeUserContext = (rawPreferences) => {
       preferredCuisines: [],
       cookingTime: 'no-preference',
       spiceLevel: 'medium',
+      dailyNutritionTargets: null,
+      householdSize: 1,
+      defaultServings: 2,
+      budgetTier: 'balanced',
+      preferredMarketplace: 'any',
     };
   }
 
+  // 1. Dietary preference
+  const dietaryPreference =
+    typeof rawPreferences.dietaryPreference === 'string'
+      ? rawPreferences.dietaryPreference
+      : 'no-preference';
+
+  // 2. Wellness goals
+  const wellnessGoals = Array.isArray(rawPreferences.wellnessGoals)
+    ? rawPreferences.wellnessGoals.filter((g) => typeof g === 'string')
+    : ['general-wellness'];
+
+  // 3. Allergies
+  const allergies = Array.isArray(rawPreferences.allergies)
+    ? rawPreferences.allergies.filter((a) => typeof a === 'string')
+    : [];
+
+  // 4. Foods to avoid
+  const foodsToAvoid = Array.isArray(rawPreferences.foodsToAvoid)
+    ? rawPreferences.foodsToAvoid.filter((f) => typeof f === 'string')
+    : [];
+
+  // 5. Preferred cuisines
+  const preferredCuisines = Array.isArray(rawPreferences.preferredCuisines)
+    ? rawPreferences.preferredCuisines.filter((c) => typeof c === 'string')
+    : [];
+
+  // 6. Cooking time
+  const cookingTime =
+    typeof rawPreferences.cookingTime === 'string'
+      ? rawPreferences.cookingTime
+      : 'no-preference';
+
+  // 7. Spice level
+  const spiceLevel =
+    typeof rawPreferences.spiceLevel === 'string'
+      ? rawPreferences.spiceLevel
+      : 'medium';
+
+  // 8. Daily nutrition targets (numeric target bounds, strictly stripped of IDs/internals)
+  let dailyNutritionTargets = null;
+  const rawTargets = rawPreferences.dailyNutritionTargets;
+  if (rawTargets && typeof rawTargets === 'object' && !Array.isArray(rawTargets)) {
+    const cleanTargets = {};
+    let hasTarget = false;
+    for (const key of ['calories', 'proteinGrams', 'carbsGrams', 'fatsGrams']) {
+      if (typeof rawTargets[key] === 'number' && Number.isFinite(rawTargets[key]) && rawTargets[key] >= 0) {
+        cleanTargets[key] = Math.round(rawTargets[key]);
+        hasTarget = true;
+      } else {
+        cleanTargets[key] = null;
+      }
+    }
+    dailyNutritionTargets = hasTarget ? cleanTargets : null;
+  }
+
+  // 9. Household size (1 to 20, integer, default 1)
+  let householdSize = 1;
+  if (
+    typeof rawPreferences.householdSize === 'number' &&
+    Number.isFinite(rawPreferences.householdSize) &&
+    Number.isInteger(rawPreferences.householdSize) &&
+    rawPreferences.householdSize >= 1 &&
+    rawPreferences.householdSize <= 20
+  ) {
+    householdSize = rawPreferences.householdSize;
+  }
+
+  // 10. Default servings (1 to 20, integer, default 2)
+  let defaultServings = 2;
+  if (
+    typeof rawPreferences.defaultServings === 'number' &&
+    Number.isFinite(rawPreferences.defaultServings) &&
+    Number.isInteger(rawPreferences.defaultServings) &&
+    rawPreferences.defaultServings >= 1 &&
+    rawPreferences.defaultServings <= 20
+  ) {
+    defaultServings = rawPreferences.defaultServings;
+  }
+
+  // 11. Budget tier (enum, default 'balanced')
+  let budgetTier = 'balanced';
+  if (typeof rawPreferences.budgetTier === 'string') {
+    const normalizedBt = rawPreferences.budgetTier.trim().toLowerCase();
+    if (VALID_BUDGET_TIERS_SET.has(normalizedBt)) {
+      budgetTier = normalizedBt;
+    }
+  }
+
+  // 12. Preferred marketplace (enum, default 'any')
+  let preferredMarketplace = 'any';
+  if (typeof rawPreferences.preferredMarketplace === 'string') {
+    const normalizedPm = rawPreferences.preferredMarketplace.trim().toLowerCase();
+    if (VALID_MARKETPLACES_SET.has(normalizedPm)) {
+      preferredMarketplace = normalizedPm;
+    }
+  }
+
   return {
-    dietaryPreference:
-      typeof rawPreferences.dietaryPreference === 'string'
-        ? rawPreferences.dietaryPreference
-        : 'no-preference',
-    wellnessGoals: Array.isArray(rawPreferences.wellnessGoals)
-      ? rawPreferences.wellnessGoals.filter((g) => typeof g === 'string')
-      : ['general-wellness'],
-    allergies: Array.isArray(rawPreferences.allergies)
-      ? rawPreferences.allergies.filter((a) => typeof a === 'string')
-      : [],
-    foodsToAvoid: Array.isArray(rawPreferences.foodsToAvoid)
-      ? rawPreferences.foodsToAvoid.filter((f) => typeof f === 'string')
-      : [],
-    preferredCuisines: Array.isArray(rawPreferences.preferredCuisines)
-      ? rawPreferences.preferredCuisines.filter((c) => typeof c === 'string')
-      : [],
-    cookingTime:
-      typeof rawPreferences.cookingTime === 'string'
-        ? rawPreferences.cookingTime
-        : 'no-preference',
-    spiceLevel:
-      typeof rawPreferences.spiceLevel === 'string'
-        ? rawPreferences.spiceLevel
-        : 'medium',
+    dietaryPreference,
+    wellnessGoals,
+    allergies,
+    foodsToAvoid,
+    preferredCuisines,
+    cookingTime,
+    spiceLevel,
+    dailyNutritionTargets,
+    householdSize,
+    defaultServings,
+    budgetTier,
+    preferredMarketplace,
   };
 };
 
@@ -136,6 +235,9 @@ You must respond with ONLY a valid JSON object matching this schema:
     "dietaryPreference": "string or null",
     "dietaryConstraints": ["string"],
     "servings": number or null,
+    "householdSize": number or null,
+    "budgetTier": "string or null",
+    "preferredMarketplace": "string or null",
     "generateRecipe": boolean or null,
     "includeGroceries": boolean or null,
     "includePricing": boolean or null,
@@ -319,6 +421,10 @@ class GeminiService {
       nutritionContext: recipeContext.nutritionContext || {},
       mealType: recipeContext.mealType || 'dinner',
       servings: recipeContext.servings || 2,
+      householdSize: recipeContext.householdSize || 1,
+      defaultServings: recipeContext.defaultServings || 2,
+      budgetTier: recipeContext.budgetTier || 'balanced',
+      preferredMarketplace: recipeContext.preferredMarketplace || 'any',
       recentMeals: recipeContext.recentMeals || [],
       requestedIngredients: recipeContext.requestedIngredients || [],
       constraints: recipeContext.constraints || {},

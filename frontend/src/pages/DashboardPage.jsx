@@ -173,12 +173,19 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
+    let isMounted = true;
     if (user) {
-      const p = getUserProfile(user.id, user);
-      setProfile(p);
+      Promise.resolve(getUserProfile(user.id, user))
+        .then((p) => {
+          if (isMounted) setProfile(p);
+        })
+        .catch(() => {});
       const items = loadGroceryList();
       setGroceryItems(items);
     }
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
   const getTimeGreeting = () => {
