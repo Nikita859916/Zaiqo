@@ -10,8 +10,9 @@ const startServer = async () => {
   try {
     await connectDB();
   } catch (error) {
-    console.error(`[Server Warning] Database could not be reached: ${error.message}`);
-    console.warn('[Server Warning] Server will continue running. Ensure MONGODB_URI is configured in .env for database operations.');
+    const safeMsg = (error.message || '').replace(/mongodb(\+srv)?:\/\/[^\s@]+@/gi, 'mongodb://[REDACTED]@');
+    console.error(`[Server Warning] Database could not be reached: ${safeMsg}`);
+    console.warn('[Server Warning] Server will continue running. Ensure MONGODB_URI is configured in environment variables for database operations.');
   }
 
   const server = app.listen(PORT, () => {
