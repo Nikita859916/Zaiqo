@@ -70,10 +70,19 @@ export const errorHandler = (err, req, res, next) => {
 
   const isDev = process.env.NODE_ENV !== 'production';
 
+  // In production, ensure no raw database credentials or tokens leak into error messages
+  let safeMessage = message;
+  if (!isDev && typeof message === 'string') {
+    safeMessage = message
+      .replace(/mongodb(\+srv)?:\/\/[^\s@]+@/gi, 'mongodb://[REDACTED]@')
+      .replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]')
+      .replace(/key=[a-zA-Z0-9_-]+/gi, 'key=[REDACTED]');
+  }
+
   res.status(statusCode).json({
     success: false,
-    error: message,
-    message: message,
+    error: safeMessage,
+    message: safeMessage,
     ...(details ? { details } : {}),
     ...(isDev && statusCode === 500 ? { stack: err.stack } : {}),
   });

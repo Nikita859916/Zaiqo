@@ -15,11 +15,11 @@ const startServer = async () => {
   }
 
   const server = app.listen(PORT, () => {
-    console.log(`[Server] Zaiqo Backend server running on http://localhost:${PORT}`);
-    console.log(`[Server] Health Check endpoint: http://localhost:${PORT}/api/health`);
-    console.log(`[Server] Auth endpoints: http://localhost:${PORT}/api/auth`);
-    console.log(`[Server] Preference endpoints: http://localhost:${PORT}/api/preferences`);
-    console.log(`[Server] Recipe endpoints: http://localhost:${PORT}/api/recipes`);
+    console.log(`[Server] Zaiqo Backend server running on port ${PORT}`);
+    console.log(`[Server] Health Check endpoints: /health and /api/health`);
+    console.log(`[Server] Auth endpoints: /api/auth`);
+    console.log(`[Server] Preference endpoints: /api/preferences`);
+    console.log(`[Server] Recipe endpoints: /api/recipes`);
   });
 
   return server;

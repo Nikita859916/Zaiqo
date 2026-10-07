@@ -15,21 +15,32 @@ import { notFoundHandler, errorHandler } from './middleware/error.middleware.js'
 const app = express();
 
 // CORS configuration for local Vite development and production Vercel frontend
+const configuredOrigins = [
+  process.env.CLIENT_ORIGIN,
+  process.env.CLIENT_URL,
+]
+  .filter(Boolean)
+  .flatMap((val) => val.split(',').map((o) => o.trim()))
+  .filter(Boolean);
+
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  process.env.CLIENT_URL,
-].filter(Boolean);
+  ...configuredOrigins,
+];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. curl, server-to-server, mobile)
+      // Allow requests with no origin (e.g. curl, server-to-server, health checks, mobile)
       if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(null, true); // Allow during development phase
+        return callback(null, true);
       }
+      // In development or when no production origins configured, allow safely
+      if (process.env.NODE_ENV !== 'production' || configuredOrigins.length === 0) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     credentials: true,
   })
@@ -37,6 +48,14 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Minimal non-sensitive cloud health probe for Render / load balancers
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Zai backend is healthy',
+  });
+});
 
 // Core API Routes
 app.use('/api/health', healthRoutes);
