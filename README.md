@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Zaiqo 🥗✨
 
-## Getting Started
+> Personalized AI-Powered Food and Wellness Platform
 
-First, run the development server:
+Zaiqo is built using a clean, fully decoupled client-server architecture designed for independent development and deployment to **Vercel** (frontend) and **Render** (backend).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## 🏗️ Architecture
+
+```text
+zaiqo/
+├── frontend/               # React + Vite + JavaScript
+│   ├── src/
+│   │   ├── components/     # UI components
+│   │   ├── pages/          # Page views (React Router)
+│   │   ├── services/       # Axios API client
+│   │   ├── App.jsx         # App routes
+│   │   ├── main.jsx        # Entry point
+│   │   └── index.css       # Tailwind CSS
+│   ├── index.html
+│   ├── vite.config.js
+│   └── package.json
+│
+├── backend/                # Node.js + Express.js + JavaScript
+│   ├── src/
+│   │   ├── config/         # MongoDB Atlas connection
+│   │   ├── controllers/    # Route controllers
+│   │   ├── middleware/     # Auth & error handling middleware
+│   │   ├── models/         # Mongoose schemas
+│   │   ├── routes/         # Express REST API routes
+│   │   └── app.js          # Express app & middleware configuration
+│   ├── server.js           # Server entry point
+│   └── package.json
+│
+├── .gitignore
+└── README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 💻 Tech Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Frontend
+- **Framework**: React.js (Vite)
+- **Language**: JavaScript (ES Modules)
+- **Styling**: Tailwind CSS
+- **Routing**: React Router
+- **HTTP Client**: Axios
+- **Animation & Icons**: Framer Motion & Lucide React
+- **Deployment**: Vercel
 
-## Learn More
+### Backend
+- **Runtime**: Node.js
+- **Framework**: Express.js
+- **Language**: JavaScript (ES Modules)
+- **Architecture**: RESTful APIs
+- **Authentication**: JWT & bcrypt
+- **Database ODM**: Mongoose
+- **Deployment**: Render
 
-To learn more about Next.js, take a look at the following resources:
+### Database & AI
+- **Database**: MongoDB Atlas
+- **AI Engine**: Google Gemini API
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🚀 Getting Started
 
-## Deploy on Vercel
+### 1. Setup Backend
+```bash
+cd backend
+npm install
+cp .env.example .env    # Configure your PORT, MONGODB_URI, JWT_SECRET, and GEMINI_API_KEY
+npm run dev             # Starts server on http://localhost:5000
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 2. Setup Frontend
+```bash
+cd frontend
+npm install
+npm run dev             # Starts Vite dev server on http://localhost:5173
+```
